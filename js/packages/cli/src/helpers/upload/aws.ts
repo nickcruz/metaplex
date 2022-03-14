@@ -1,10 +1,21 @@
 import log from 'loglevel';
-import { basename } from 'path';
 import { createReadStream } from 'fs';
 import { Readable } from 'form-data';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import path from 'path';
 import { getType } from 'mime';
+
+const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const charactersLength = characters.length;
+
+const generateId = (length = 32) => {
+  const result: string[] = new Array(length);
+  for (let i = 0; i < length; i++) {
+    result[i] = characters.charAt(Math.floor(Math.random() *
+      charactersLength));
+  }
+  return result.join("");
+}
 
 async function uploadFile(
   s3Client: S3Client,
@@ -12,6 +23,7 @@ async function uploadFile(
   filename: string,
   contentType: string,
   body: string | Readable | ReadableStream<any> | Blob | Uint8Array | Buffer,
+  region: string,
 ): Promise<string> {
   const mediaUploadParams = {
     Bucket: awsS3Bucket,
@@ -28,7 +40,7 @@ async function uploadFile(
     log.debug('Error', err);
   }
 
-  const url = `https://${awsS3Bucket}.s3.amazonaws.com/${filename}`;
+  const url = `https://${awsS3Bucket}.s3.${region}.amazonaws.com/${filename}`;
   log.debug('Location:', url);
   return url;
 }
@@ -39,11 +51,12 @@ export async function awsUpload(
   animation: string,
   manifestBuffer: Buffer,
 ) {
-  const REGION = 'us-east-1'; // TODO: Parameterize this.
+  const REGION = 'us-west-2';
   const s3Client = new S3Client({ region: REGION });
+  const id = generateId();
 
   async function uploadMedia(media) {
-    const mediaPath = `assets/${basename(media)}`;
+    const mediaPath = `assets/${id}.png`;
     log.debug('media:', media);
     log.debug('mediaPath:', mediaPath);
     const mediaFileStream = createReadStream(media);
@@ -53,6 +66,7 @@ export async function awsUpload(
       mediaPath,
       getType(media),
       mediaFileStream,
+      REGION,
     );
     return mediaUrl;
   }
@@ -63,8 +77,8 @@ export async function awsUpload(
     .replace('.', '')}`;
   const animationUrl = animation
     ? `${await uploadMedia(animation)}?ext=${path
-        .extname(animation)
-        .replace('.', '')}`
+      .extname(animation)
+      .replace('.', '')}`
     : undefined;
   const manifestJson = JSON.parse(manifestBuffer.toString('utf8'));
   manifestJson.image = imageUrl;
@@ -74,14 +88,14 @@ export async function awsUpload(
 
   const updatedManifestBuffer = Buffer.from(JSON.stringify(manifestJson));
 
-  const extensionRegex = new RegExp(`${path.extname(image)}$`);
-  const metadataFilename = image.replace(extensionRegex, '.json');
+  const metadataFilename = `assets/${id}.json`;
   const metadataUrl = await uploadFile(
     s3Client,
     awsS3Bucket,
     metadataFilename,
     'application/json',
     updatedManifestBuffer,
+    REGION,
   );
 
   return [metadataUrl, imageUrl, animationUrl];

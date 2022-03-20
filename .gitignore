@@ -38,3 +38,5 @@ traits
 traits-configuration.json
 js/packages/cli/test/assets
 assets/
+devnet/candy-machine/
+mainnet-beta/candy-machine/

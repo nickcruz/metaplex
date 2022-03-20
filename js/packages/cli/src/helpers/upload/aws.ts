@@ -5,17 +5,17 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import path from 'path';
 import { getType } from 'mime';
 
-const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const characters =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const charactersLength = characters.length;
 
 const generateId = (length = 32) => {
   const result: string[] = new Array(length);
   for (let i = 0; i < length; i++) {
-    result[i] = characters.charAt(Math.floor(Math.random() *
-      charactersLength));
+    result[i] = characters.charAt(Math.floor(Math.random() * charactersLength));
   }
-  return result.join("");
-}
+  return result.join('');
+};
 
 async function uploadFile(
   s3Client: S3Client,
@@ -45,6 +45,18 @@ async function uploadFile(
   return url;
 }
 
+// Gets the entire string to the last '/' in the filename
+// devnet/candy-machine/42.png -> devnet/candy-machine/
+const getFolderPrefix = (filename: string): string => {
+  let indexOfLastForwardSlash = 0;
+  for (let i = 0; i < filename.length; ++i) {
+    if (filename[i] === '/') {
+      indexOfLastForwardSlash = i;
+    }
+  }
+  return filename.slice(0, indexOfLastForwardSlash + 1);
+};
+
 export async function awsUpload(
   awsS3Bucket: string,
   image: string,
@@ -54,9 +66,10 @@ export async function awsUpload(
   const REGION = 'us-west-2';
   const s3Client = new S3Client({ region: REGION });
   const id = generateId();
+  const prefix = getFolderPrefix(image);
 
   async function uploadMedia(media) {
-    const mediaPath = `assets/${id}.png`;
+    const mediaPath = `${prefix}${id}.png`;
     log.debug('media:', media);
     log.debug('mediaPath:', mediaPath);
     const mediaFileStream = createReadStream(media);
@@ -77,8 +90,8 @@ export async function awsUpload(
     .replace('.', '')}`;
   const animationUrl = animation
     ? `${await uploadMedia(animation)}?ext=${path
-      .extname(animation)
-      .replace('.', '')}`
+        .extname(animation)
+        .replace('.', '')}`
     : undefined;
   const manifestJson = JSON.parse(manifestBuffer.toString('utf8'));
   manifestJson.image = imageUrl;
@@ -88,7 +101,7 @@ export async function awsUpload(
 
   const updatedManifestBuffer = Buffer.from(JSON.stringify(manifestJson));
 
-  const metadataFilename = `assets/${id}.json`;
+  const metadataFilename = `${prefix}${id}.json`;
   const metadataUrl = await uploadFile(
     s3Client,
     awsS3Bucket,
